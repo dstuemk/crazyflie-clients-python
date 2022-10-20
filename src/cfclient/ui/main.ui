@@ -189,7 +189,7 @@
       </item>
       <item>
        <widget class="QGroupBox" name="groupBox">
-        <layout class="QHBoxLayout" stretch="0,0,0">
+        <layout class="QHBoxLayout" stretch="0,0,1">
          <item>
           <widget class="QLabel" name="addressLabel">
            <property name="text">
@@ -214,17 +214,17 @@
           </widget>
          </item>
          <item>
-          <spacer name="horizontalSpacer_2">
-           <property name="orientation">
-            <enum>Qt::Horizontal</enum>
+          <widget class="QCheckBox" name="autoReconnectCheckBox">
+           <property name="mouseTracking">
+            <bool>false</bool>
            </property>
-           <property name="sizeHint" stdset="0">
-            <size>
-             <width>40</width>
-             <height>20</height>
-            </size>
+           <property name="text">
+            <string>Auto Reconnect</string>
            </property>
-          </spacer>
+           <property name="checked">
+            <bool>false</bool>
+           </property>
+          </widget>
          </item>
         </layout>
        </widget>
@@ -254,8 +254,8 @@
           <rect>
            <x>0</x>
            <y>0</y>
-           <width>846</width>
-           <height>469</height>
+           <width>852</width>
+           <height>493</height>
           </rect>
          </property>
          <property name="sizePolicy">
@@ -281,7 +281,7 @@
            <number>0</number>
           </property>
           <item row="0" column="0">
-           <widget class="QTabWidget" name="tab_widget">
+           <widget class="QTabWidget" name="tabs">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
               <horstretch>0</horstretch>
@@ -307,7 +307,7 @@
      <x>0</x>
      <y>0</y>
      <width>872</width>
-     <height>24</height>
+     <height>22</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">

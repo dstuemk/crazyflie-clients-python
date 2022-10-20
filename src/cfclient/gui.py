@@ -36,7 +36,7 @@ import signal
 
 import logging
 
-from qasync import QEventLoop
+from quamash import QSelectorEventLoop
 import cfclient
 
 __author__ = 'Bitcraze AB'
@@ -165,15 +165,12 @@ def main():
     from PyQt5.QtWidgets import QApplication
     from PyQt5.QtGui import QIcon
 
-    if os.name == 'posix':
-        logger.info('If startup fails because of "xcb", install dependency with `sudo apt install libxcb-xinerama0`.')
-
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     from cfclient.utils.ui import UiUtils
 
     # Create and set an event loop that combines qt and asyncio
-    loop = QEventLoop(app)
+    loop = QSelectorEventLoop(app)
     asyncio.set_event_loop(loop)
 
     app.setWindowIcon(QIcon(cfclient.module_path + "/ui/icons/icon-256.png"))

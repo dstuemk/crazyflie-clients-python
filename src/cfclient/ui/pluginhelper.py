@@ -7,7 +7,7 @@
 #  +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
 #   ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
 #
-#  Copyright (C) 2011-2021 Bitcraze AB
+#  Copyright (C) 2011-2013 Bitcraze AB
 #
 #  Crazyflie Nano Quadcopter Client
 #
@@ -28,7 +28,6 @@
 """
 Used for passing objects to tabs and toolboxes.
 """
-import os
 
 __author__ = 'Bitcraze AB'
 __all__ = ['PluginHelper']
@@ -43,6 +42,3 @@ class PluginHelper():
         self.logConfigReader = None
         self.mainUI = None
         self.plotTab = None
-        self.pose_logger = None
-        self.connectivity_manager = None
-        self.current_folder = os.path.expanduser('~')

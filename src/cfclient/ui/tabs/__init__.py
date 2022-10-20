@@ -30,7 +30,6 @@ Dropping a new .py file into this directory will automatically list and load
 it into the UI when it is started.
 """
 from .ConsoleTab import ConsoleTab
-from .CrtpSharkToolbox import CrtpSharkToolbox
 # from .ExampleTab import ExampleTab
 from .FlightTab import FlightTab
 # from .GpsTab import GpsTab
@@ -41,9 +40,8 @@ from .ParamTab import ParamTab
 from .PlotTab import PlotTab
 from .locopositioning_tab import LocoPositioningTab
 from .QualisysTab import QualisysTab
-from .LogClientTab import LogClientTab
-from .lighthouse_tab import LighthouseTab
-from .TuningTab import TuningTab
+# from .NeuralTab import NeuralTab
+from .NeuralTab import NeuralTab
 
 __author__ = 'Bitcraze AB'
 __all__ = []
@@ -59,9 +57,6 @@ available = [
     ParamTab,
     PlotTab,
     LocoPositioningTab,
-    LighthouseTab,
     QualisysTab,
-    LogClientTab,
-    TuningTab,
-    CrtpSharkToolbox,
+    NeuralTab,
 ]

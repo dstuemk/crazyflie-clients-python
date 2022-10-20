@@ -7,7 +7,7 @@
 #  +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
 #   ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
 #
-#  Copyright (C) 2011-2021 Bitcraze AB
+#  Copyright (C) 2011-2013 Bitcraze AB
 #
 #  Crazyflie Nano Quadcopter Client
 #
@@ -28,16 +28,13 @@ The main file for the Crazyflie control application.
 """
 import logging
 import sys
-import usb
 
 import cfclient
-from cfclient.ui.pose_logger import PoseLogger
-from cfclient.ui.tab_toolbox import TabToolbox
 import cfclient.ui.tabs
+import cfclient.ui.toolboxes
 import cflib.crtp
 from cfclient.ui.dialogs.about import AboutDialog
 from cfclient.ui.dialogs.bootloader import BootloaderDialog
-from cfclient.ui.connectivity_manager import ConnectivityManager
 from cfclient.utils.config import Config
 from cfclient.utils.config_manager import ConfigManager
 from cfclient.utils.input import JoystickReader
@@ -55,12 +52,10 @@ from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtCore import QDir
 from PyQt5.QtCore import QThread
 from PyQt5.QtCore import QUrl
-from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QAction
 from PyQt5.QtWidgets import QActionGroup
 from PyQt5.QtWidgets import QShortcut
 from PyQt5.QtGui import QDesktopServices
-from PyQt5.QtGui import QPalette
 from PyQt5.QtWidgets import QLabel
 from PyQt5.QtWidgets import QMenu
 from PyQt5.QtWidgets import QMessageBox
@@ -75,9 +70,19 @@ __all__ = ['MainUI']
 
 logger = logging.getLogger(__name__)
 
+INTERFACE_PROMPT_TEXT = 'Select an interface'
+
 (main_window_class,
  main_windows_base_class) = (uic.loadUiType(cfclient.module_path +
                                             '/ui/main.ui'))
+
+
+class MyDockWidget(QtWidgets.QDockWidget):
+    closed = pyqtSignal()
+
+    def closeEvent(self, event):
+        super(MyDockWidget, self).closeEvent(event)
+        self.closed.emit()
 
 
 class UIState:
@@ -98,7 +103,7 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
     connectionDoneSignal = pyqtSignal(str)
     connectionFailedSignal = pyqtSignal(str, str)
     disconnectedSignal = pyqtSignal(str)
-    linkQualitySignal = pyqtSignal(float)
+    linkQualitySignal = pyqtSignal(int)
 
     _input_device_error_signal = pyqtSignal(str)
     _input_discovery_signal = pyqtSignal(object)
@@ -118,7 +123,8 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
         self.cf = Crazyflie(ro_cache=None,
                             rw_cache=cfclient.config_path + "/cache")
 
-        cflib.crtp.init_drivers()
+        cflib.crtp.init_drivers(enable_debug_driver=Config()
+                                .get("enable_debug_driver"))
 
         zmq_params = ZMQParamAccess(self.cf)
         zmq_params.start()
@@ -135,15 +141,6 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
                                        " fly.")
         self.statusBar().addWidget(self._statusbar_label)
 
-        #
-        # We use this hacky-trick to find out if we are in dark-mode and
-        # figure out what bgcolor to set from that. We always use the current
-        # palette forgreound.
-        #
-        self.textColor = self._statusbar_label.palette().color(QPalette.WindowText)
-        self.bgColor = self._statusbar_label.palette().color(QPalette.Background)
-        self.isDark = self.textColor.value() > self.bgColor.value()
-
         self.joystickReader = JoystickReader()
         self._active_device = ""
         # self.configGroup = QActionGroup(self._menu_mappings, exclusive=True)
@@ -154,7 +151,8 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
         # TODO: Need to reload configs
         # ConfigManager().conf_needs_reload.add_callback(self._reload_configs)
 
-        self.connect_input = QShortcut("Ctrl+I", self.connectButton, self._connect)
+        self.connect_input = QShortcut("Ctrl+I", self.connectButton,
+                                       self._connect)
         self.cf.connection_failed.add_callback(
             self.connectionFailedSignal.emit)
         self.connectionFailedSignal.connect(self._connection_failed)
@@ -169,6 +167,10 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
 
         # Connect UI signals
         self.logConfigAction.triggered.connect(self._show_connect_dialog)
+        self.interfaceCombo.currentIndexChanged['QString'].connect(
+            self.interfaceChanged)
+        self.connectButton.clicked.connect(self._connect)
+        self.scanButton.clicked.connect(self._scan)
         self.menuItemConnect.triggered.connect(self._connect)
         self.menuItemConfInputDevice.triggered.connect(
             self._show_input_device_config_dialog)
@@ -178,18 +180,12 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
         self._menuItem_openconfigfolder.triggered.connect(
             self._open_config_folder)
 
-        self._set_address()
+        self.address.setValue(0xE7E7E7E7E7)
 
-        self._connectivity_manager = ConnectivityManager()
-        self._connectivity_manager.register_ui_elements(
-            ConnectivityManager.UiElementsContainer(
-                interface_combo=self.interfaceCombo,
-                address_spinner=self.address,
-                connect_button=self.connectButton,
-                scan_button=self.scanButton))
-
-        self._connectivity_manager.connect_button_clicked.connect(self._connect)
-        self._connectivity_manager.scan_button_clicked.connect(self._scan_from_button)
+        self._auto_reconnect_enabled = Config().get("auto_reconnect")
+        self.autoReconnectCheckBox.toggled.connect(
+            self._auto_reconnect_changed)
+        self.autoReconnectCheckBox.setChecked(Config().get("auto_reconnect"))
 
         self._disable_input = False
 
@@ -226,7 +222,11 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
         # Connect link quality feedback
         self.cf.link_quality_updated.add_callback(self.linkQualitySignal.emit)
         self.linkQualitySignal.connect(
-            lambda percentage: self.linkQualityBar.setValue(int(percentage)))
+            lambda percentage: self.linkQualityBar.setValue(percentage))
+
+        self._selected_interface = None
+        self._initial_scan = True
+        self._scan()
 
         # Parse the log configuration files
         self.logConfigReader = LogConfigReader(self.cf)
@@ -241,8 +241,6 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
         cfclient.ui.pluginhelper.cf = self.cf
         cfclient.ui.pluginhelper.inputDeviceReader = self.joystickReader
         cfclient.ui.pluginhelper.logConfigReader = self.logConfigReader
-        cfclient.ui.pluginhelper.pose_logger = PoseLogger(self.cf)
-        cfclient.ui.pluginhelper.connectivity_manager = self._connectivity_manager
         cfclient.ui.pluginhelper.mainUI = self
 
         self.logConfigDialogue = LogConfigDialogue(cfclient.ui.pluginhelper)
@@ -253,21 +251,62 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
         self.menuItemAbout.triggered.connect(self._about_dialog.show)
         self._menu_cf2_config.triggered.connect(self._cf2config_dialog.show)
 
-        self._connectivity_manager.set_address(self.address.value())
+        # Load and connect tabs
+        self.tabsMenuItem = QMenu("Tabs", self.menuView, enabled=True)
+        self.menuView.addMenu(self.tabsMenuItem)
 
-        self._initial_scan = True
-        self._scan(self._connectivity_manager.get_address())
+        tabItems = {}
+        self.loadedTabs = []
+        for tabClass in cfclient.ui.tabs.available:
+            tab = tabClass(self.tabs, cfclient.ui.pluginhelper)
 
-        self.tabs_menu_item = QMenu("Tabs", self.menuView, enabled=True)
-        self.menuView.addMenu(self.tabs_menu_item)
+            # Set reference for plot-tab.
+            if isinstance(tab, cfclient.ui.tabs.PlotTab):
+                cfclient.ui.pluginhelper.plotTab = tab
 
-        self.toolboxes_menu_item = QMenu("Toolboxes", self.menuView, enabled=True)
-        self.menuView.addMenu(self.toolboxes_menu_item)
+            item = QtWidgets.QAction(tab.getMenuName(), self, checkable=True)
+            item.toggled.connect(tab.toggleVisibility)
+            self.tabsMenuItem.addAction(item)
+            tabItems[tab.getTabName()] = item
+            self.loadedTabs.append(tab)
+            if not tab.enabled:
+                item.setEnabled(False)
 
-        self.loaded_tab_toolboxes = self.create_tab_toolboxes(self.tabs_menu_item,
-                                                              self.toolboxes_menu_item,
-                                                              self.tab_widget)
-        self.read_tab_toolbox_config(self.loaded_tab_toolboxes)
+        # First instantiate all tabs and then open them in the correct order
+        try:
+            for tName in Config().get("open_tabs").split(","):
+                t = tabItems[tName]
+                if (t is not None and t.isEnabled()):
+                    # Toggle though menu so it's also marked as open there
+                    t.toggle()
+        except Exception as e:
+            logger.warning("Exception while opening tabs [{}]".format(e))
+
+        # Loading toolboxes (A bit of magic for a lot of automatic)
+        self.toolboxesMenuItem = QMenu("Toolboxes", self.menuView,
+                                       enabled=True)
+        self.menuView.addMenu(self.toolboxesMenuItem)
+
+        self.toolboxes = []
+        for t_class in cfclient.ui.toolboxes.toolboxes:
+            toolbox = t_class(cfclient.ui.pluginhelper)
+            dockToolbox = MyDockWidget(toolbox.getName())
+            dockToolbox.setWidget(toolbox)
+            self.toolboxes += [dockToolbox, ]
+
+            # Add menu item for the toolbox
+            item = QtWidgets.QAction(toolbox.getName(), self)
+            item.setCheckable(True)
+            item.triggered.connect(self.toggleToolbox)
+            self.toolboxesMenuItem.addAction(item)
+
+            dockToolbox.closed.connect(lambda: self.toggleToolbox(False))
+
+            # Setup some introspection
+            item.dockToolbox = dockToolbox
+            item.menuItem = item
+            dockToolbox.dockToolbox = dockToolbox
+            dockToolbox.menuItem = item
 
         # References to all the device sub-menus in the "Input device" menu
         self._all_role_menus = ()
@@ -314,64 +353,6 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
             self._theme_group.addAction(node)
             self.menuThemes.addAction(node)
 
-        # We only want to warn about USB permission once
-        self._permission_warned = False
-
-    def create_tab_toolboxes(self, tabs_menu_item, toolboxes_menu_item, tab_widget):
-        loaded_tab_toolboxes = {}
-
-        for tab_class in cfclient.ui.tabs.available:
-            tab_toolbox = tab_class(cfclient.ui.pluginhelper)
-            loaded_tab_toolboxes[tab_toolbox.get_tab_toolbox_name()] = tab_toolbox
-
-            # Set reference for plot-tab.
-            if isinstance(tab_toolbox, cfclient.ui.tabs.PlotTab):
-                cfclient.ui.pluginhelper.plotTab = tab_toolbox
-
-            # Add to tabs menu
-            tab_action_item = QtWidgets.QAction(tab_toolbox.get_tab_toolbox_name())
-            tab_action_item.setCheckable(True)
-            tab_action_item.triggered.connect(self.toggle_tab_visibility)
-            tab_action_item.tab_toolbox = tab_toolbox
-            tab_toolbox.tab_action_item = tab_action_item
-
-            tabs_menu_item.addAction(tab_action_item)
-
-            # Add to toolbox menu
-            toolbox_action_item = QtWidgets.QAction(tab_toolbox.get_tab_toolbox_name())
-            toolbox_action_item.setCheckable(True)
-            toolbox_action_item.triggered.connect(self.toggle_toolbox_visibility)
-            toolbox_action_item.tab_toolbox = tab_toolbox
-            tab_toolbox.toolbox_action_item = toolbox_action_item
-            tab_toolbox.dock_widget.closed.connect(lambda: self.toggle_toolbox_visibility(False))
-            tab_toolbox.dock_widget.dockLocationChanged.connect(lambda area: self.set_preferred_dock_area(area))
-
-            toolboxes_menu_item.addAction(toolbox_action_item)
-
-        return loaded_tab_toolboxes
-
-    def read_tab_toolbox_config(self, loaded_tab_toolboxes):
-        # Add tabs in the correct order
-        for name in TabToolbox.read_open_tab_config():
-            if name in loaded_tab_toolboxes.keys():
-                self._tab_toolbox_show_as_tab(loaded_tab_toolboxes[name])
-
-        for name in TabToolbox.read_open_toolbox_config():
-            if name in loaded_tab_toolboxes.keys():
-                self._tab_toolbox_show_as_toolbox(loaded_tab_toolboxes[name])
-
-    def _set_address(self):
-        address = 0xE7E7E7E7E7
-        try:
-            link_uri = Config().get("link_uri")
-            if link_uri.startswith("radio://"):
-                if len(link_uri) > 0:
-                    address = int(link_uri.split('/')[-1], 16)
-        except Exception as err:
-            logger.warn('failed to parse address from config: %s' % str(err))
-        finally:
-            self.address.setValue(address)
-
     def _theme_selected(self, *args):
         """ Callback when a theme is selected. """
         for checkbox in self._theme_checkboxes:
@@ -401,8 +382,18 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
         """
         self._disable_input = disable
 
+    def interfaceChanged(self, interface):
+        if interface == INTERFACE_PROMPT_TEXT:
+            self._selected_interface = None
+        else:
+            self._selected_interface = interface
+        self._update_ui_state()
+
     def foundInterfaces(self, interfaces):
-        selected_interface = self._connectivity_manager.get_interface()
+        selected_interface = self._selected_interface
+
+        self.interfaceCombo.clear()
+        self.interfaceCombo.addItem(INTERFACE_PROMPT_TEXT)
 
         formatted_interfaces = []
         for i in interfaces:
@@ -411,6 +402,7 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
             else:
                 interface = i[0]
             formatted_interfaces.append(interface)
+        self.interfaceCombo.addItems(formatted_interfaces)
 
         if self._initial_scan:
             self._initial_scan = False
@@ -429,14 +421,14 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
         if len(interfaces) == 1 and selected_interface is None:
             selected_interface = interfaces[0][0]
 
-        newIndex = None
+        newIndex = 0
         if selected_interface is not None:
             try:
-                newIndex = formatted_interfaces.index(selected_interface)
+                newIndex = formatted_interfaces.index(selected_interface) + 1
             except ValueError:
                 pass
 
-        self._connectivity_manager.set_interfaces(formatted_interfaces, newIndex)
+        self.interfaceCombo.setCurrentIndex(newIndex)
 
         self.uiState = UIState.DISCONNECTED
         self._update_ui_state()
@@ -444,104 +436,75 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
     def _update_ui_state(self):
         if self.uiState == UIState.DISCONNECTED:
             self.setWindowTitle("Not connected")
-            canConnect = self._connectivity_manager.get_interface() is not None
+            canConnect = self._selected_interface is not None
             self.menuItemConnect.setText("Connect to Crazyflie")
             self.menuItemConnect.setEnabled(canConnect)
-            self._connectivity_manager.set_state(ConnectivityManager.UIState.DISCONNECTED)
+            self.connectButton.setText("Connect")
+            self.connectButton.setToolTip("Connect to the Crazyflie on"
+                                          "the selected interface (Ctrl+I)")
+            self.connectButton.setEnabled(canConnect)
+            self.scanButton.setText("Scan")
+            self.scanButton.setEnabled(True)
+            self.address.setEnabled(True)
             self.batteryBar.setValue(3000)
             self._menu_cf2_config.setEnabled(False)
             self.linkQualityBar.setValue(0)
+            self.menuItemBootloader.setEnabled(True)
             self.logConfigAction.setEnabled(False)
+            self.interfaceCombo.setEnabled(True)
         elif self.uiState == UIState.CONNECTED:
-            s = "Connected on %s" % self._connectivity_manager.get_interface()
+            s = "Connected on %s" % self._selected_interface
             self.setWindowTitle(s)
             self.menuItemConnect.setText("Disconnect")
             self.menuItemConnect.setEnabled(True)
-            self._connectivity_manager.set_state(ConnectivityManager.UIState.CONNECTED)
+            self.connectButton.setText("Disconnect")
+            self.connectButton.setToolTip("Disconnect from"
+                                          "the Crazyflie (Ctrl+I)")
+            self.scanButton.setEnabled(False)
             self.logConfigAction.setEnabled(True)
             # Find out if there's an I2C EEPROM, otherwise don't show the
             # dialog.
             if len(self.cf.mem.get_mems(MemoryElement.TYPE_I2C)) > 0:
                 self._menu_cf2_config.setEnabled(True)
         elif self.uiState == UIState.CONNECTING:
-            s = "Connecting to {} ...".format(self._connectivity_manager.get_interface())
+            s = "Connecting to {} ...".format(self._selected_interface)
             self.setWindowTitle(s)
             self.menuItemConnect.setText("Cancel")
             self.menuItemConnect.setEnabled(True)
-            self._connectivity_manager.set_state(ConnectivityManager.UIState.CONNECTING)
+            self.connectButton.setText("Cancel")
+            self.connectButton.setToolTip(
+                "Cancel connecting to the Crazyflie")
+            self.scanButton.setEnabled(False)
+            self.address.setEnabled(False)
+            self.menuItemBootloader.setEnabled(False)
+            self.interfaceCombo.setEnabled(False)
         elif self.uiState == UIState.SCANNING:
             self.setWindowTitle("Scanning ...")
+            self.connectButton.setText("Connect")
             self.menuItemConnect.setEnabled(False)
-            self._connectivity_manager.set_state(ConnectivityManager.UIState.SCANNING)
+            self.connectButton.setText("Connect")
+            self.connectButton.setEnabled(False)
+            self.scanButton.setText("Scanning...")
+            self.scanButton.setEnabled(False)
+            self.address.setEnabled(False)
+            self.menuItemBootloader.setEnabled(False)
+            self.interfaceCombo.setEnabled(False)
 
     @pyqtSlot(bool)
-    def toggle_tab_visibility(self, checked):
-        tab_action_item = self.sender()
-        tab_toolbox = tab_action_item.tab_toolbox
+    def toggleToolbox(self, display):
+        menuItem = self.sender().menuItem
+        dockToolbox = self.sender().dockToolbox
 
-        if checked:
-            self._tab_toolbox_show_as_tab(tab_toolbox)
-        else:
-            self._tab_toolbox_hide(tab_toolbox)
-
-    @pyqtSlot(bool)
-    def toggle_toolbox_visibility(self, checked):
-        toolbox_action_item = self.sender()
-        tab_toolbox = toolbox_action_item.tab_toolbox
-
-        if checked:
-            self._tab_toolbox_show_as_toolbox(tab_toolbox)
-        else:
-            self._tab_toolbox_hide(tab_toolbox)
-
-    def _tab_toolbox_show_as_tab(self, tab_toolbox):
-        if tab_toolbox.get_display_state() == TabToolbox.DS_TOOLBOX:
-            dock_widget = tab_toolbox.dock_widget
-            self.removeDockWidget(dock_widget)
-            dock_widget.hide()
-
-        if tab_toolbox.get_display_state() != TabToolbox.DS_TAB:
-            tab_toolbox_name = tab_toolbox.get_tab_toolbox_name()
-            self.tab_widget.addTab(tab_toolbox, tab_toolbox_name)
-
-        tab_toolbox.tab_action_item.setChecked(True)
-        tab_toolbox.toolbox_action_item.setChecked(False)
-        tab_toolbox.set_display_state(TabToolbox.DS_TAB)
-
-    def _tab_toolbox_show_as_toolbox(self, tab_toolbox):
-        dock_widget = tab_toolbox.dock_widget
-
-        if tab_toolbox.get_display_state() == TabToolbox.DS_TAB:
-            self.tab_widget.removeTab(self.tab_widget.indexOf(tab_toolbox))
-
-        if tab_toolbox.get_display_state() != TabToolbox.DS_TOOLBOX:
-            self.addDockWidget(tab_toolbox.preferred_dock_area(), dock_widget)
-            dock_widget.setWidget(tab_toolbox)
-            dock_widget.show()
-
-        tab_toolbox.tab_action_item.setChecked(False)
-        tab_toolbox.toolbox_action_item.setChecked(True)
-        tab_toolbox.set_display_state(TabToolbox.DS_TOOLBOX)
-
-    def _tab_toolbox_hide(self, tab_toolbox):
-        dock_widget = tab_toolbox.dock_widget
-
-        if tab_toolbox.get_display_state() == TabToolbox.DS_TAB:
-            self.tab_widget.removeTab(self.tab_widget.indexOf(tab_toolbox))
-        elif tab_toolbox.get_display_state() == TabToolbox.DS_TOOLBOX:
-            self.removeDockWidget(dock_widget)
-            dock_widget.hide()
-            tab_toolbox.toolbox_action_item.setChecked(False)
-
-        tab_toolbox.tab_action_item.setChecked(False)
-        tab_toolbox.toolbox_action_item.setChecked(False)
-        tab_toolbox.set_display_state(TabToolbox.DS_HIDDEN)
-
-    @pyqtSlot(Qt.DockWidgetArea)
-    def set_preferred_dock_area(self, area):
-        dock_widget = self.sender()
-        tab_toolbox = dock_widget.tab_toolbox
-        tab_toolbox.set_preferred_dock_area(area)
+        if display and not dockToolbox.isVisible():
+            dockToolbox.widget().enable()
+            self.addDockWidget(dockToolbox.widget().preferedDockArea(),
+                               dockToolbox)
+            dockToolbox.show()
+        elif not display:
+            dockToolbox.widget().disable()
+            self.removeDockWidget(dockToolbox)
+            dockToolbox.hide()
+            menuItem.setChecked(False)
 
     def _rescan_devices(self):
         self._statusbar_label.setText("No inputdevice connected!")
@@ -558,6 +521,11 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
     def _show_input_device_config_dialog(self):
         self.inputConfig = InputConfigDialogue(self.joystickReader)
         self.inputConfig.show()
+
+    def _auto_reconnect_changed(self, checked):
+        self._auto_reconnect_enabled = checked
+        Config().set("auto_reconnect", checked)
+        logger.info("Auto reconnect enabled: {}".format(checked))
 
     def _show_connect_dialog(self):
         self.logConfigDialogue.show()
@@ -580,7 +548,7 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
         self.uiState = UIState.CONNECTED
         self._update_ui_state()
 
-        Config().set("link_uri", str(self._connectivity_manager.get_interface()))
+        Config().set("link_uri", str(self._selected_interface))
 
         lg = LogConfig("Battery", 1000)
         lg.add_variable("pm.vbat", "float")
@@ -614,24 +582,30 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
                                                                 msg))
 
     def _connection_lost(self, linkURI, msg):
-        if self.isActiveWindow():
-            warningCaption = "Communication failure"
-            error = "Connection lost to {}: {}".format(linkURI, msg)
-            QMessageBox.critical(self, warningCaption, error)
-            self.uiState = UIState.DISCONNECTED
-            self._update_ui_state()
+        if not self._auto_reconnect_enabled:
+            if self.isActiveWindow():
+                warningCaption = "Communication failure"
+                error = "Connection lost to {}: {}".format(linkURI, msg)
+                QMessageBox.critical(self, warningCaption, error)
+                self.uiState = UIState.DISCONNECTED
+                self._update_ui_state()
+        else:
+            self._connect()
 
     def _connection_failed(self, linkURI, error):
-        msg = "Failed to connect on {}: {}".format(linkURI, error)
-        warningCaption = "Communication failure"
-        QMessageBox.critical(self, warningCaption, msg)
-        self.uiState = UIState.DISCONNECTED
-        self._update_ui_state()
+        if not self._auto_reconnect_enabled:
+            msg = "Failed to connect on {}: {}".format(linkURI, error)
+            warningCaption = "Communication failure"
+            QMessageBox.critical(self, warningCaption, msg)
+            self.uiState = UIState.DISCONNECTED
+            self._update_ui_state()
+        else:
+            self._connect()
 
     def closeEvent(self, event):
-        Config().save_file()
-        self.cf.close_link()
         self.hide()
+        self.cf.close_link()
+        Config().save_file()
 
     def resizeEvent(self, event):
         Config().set("window_size", [event.size().width(),
@@ -645,40 +619,12 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
             self.uiState = UIState.DISCONNECTED
             self._update_ui_state()
         else:
-            self.cf.open_link(self._connectivity_manager.get_interface())
+            self.cf.open_link(self._selected_interface)
 
-    def _scan(self, address):
+    def _scan(self):
         self.uiState = UIState.SCANNING
         self._update_ui_state()
-        self.scanner.scanSignal.emit(address)
-
-    def _scan_from_button(self, address):
-        #
-        # Below we check if we can open the Crazyradio device.
-        # If it is there, but we have no permissions we inform the user, once,
-        # about how to install the udev rules.
-        #
-        if not self._permission_warned:
-            try:
-                radio = cflib.crtp.radiodriver.RadioManager.open(0)
-                radio.close()
-            except usb.core.USBError as e:
-                if e.errno == 13:  # Permission denied
-                    link = "<a href='https://www.bitcraze.io/documentation/repository/crazyflie-lib-python/master/installation/usb_permissions/'>Install USB Permissions</a>" # noqa
-                    msg = QMessageBox()
-                    msg.setIcon(QMessageBox.Information)
-                    msg.setTextFormat(Qt.RichText)
-                    msg.setText("Could not access Crazyradio")
-                    msg.setInformativeText(link)
-                    msg.setWindowTitle("Crazyradio permissions")
-                    msg.exec()
-                    self._permission_warned = True
-            except Exception as e:
-                # For other Crazyradio exceptions (for instance if it's not attached)
-                # ignore and keep scanning other link drivers.
-                logger.warning(e)
-
-        self._scan(address)
+        self.scanner.scanSignal.emit(self.address.value())
 
     def _display_input_device_error(self, error):
         self.cf.close_link()
@@ -776,8 +722,8 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
 
     def _inputconfig_selected(self, checked):
         """Called when a new configuration has been selected from the menu. The
-        data in the menu object is a reference to the device QAction in parent
-        menu. This contains a reference to the raw device."""
+        data in the menu object is a referance to the device QAction in parent
+        menu. This contains a referance to the raw device."""
         if not checked:
             return
 

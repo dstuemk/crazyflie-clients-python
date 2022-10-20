@@ -7,7 +7,7 @@
 #  +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
 #   ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
 #
-#  Copyright (C) 2011-2012 Bitcraze AB
+#  Copyright (C) 2011-2013 Bitcraze AB
 #
 #  Crazyflie Nano Quadcopter Client
 #
@@ -28,7 +28,7 @@ Shows the Log TOC of available variables in the Crazyflie.
 """
 
 import cfclient
-from cfclient.ui.tab_toolbox import TabToolbox
+from cfclient.ui.tab import Tab
 from PyQt5 import QtWidgets
 from PyQt5 import uic
 from PyQt5.QtCore import pyqtSignal
@@ -38,28 +38,28 @@ from PyQt5.QtCore import Qt
 __author__ = 'Bitcraze AB'
 __all__ = ['LogTab']
 
-param_tab_class = uic.loadUiType(cfclient.module_path + "/ui/tabs/logTab.ui")[0]
+param_tab_class = uic.loadUiType(cfclient.module_path +
+                                 "/ui/tabs/logTab.ui")[0]
 
 
-class LogTab(TabToolbox, param_tab_class):
+class LogTab(Tab, param_tab_class):
     connectedSignal = pyqtSignal(str)
     disconnectedSignal = pyqtSignal(str)
 
-    def __init__(self, helper):
-        super(LogTab, self).__init__(helper, 'Log TOC')
+    def __init__(self, tabWidget, helper, *args):
+        super(LogTab, self).__init__(*args)
         self.setupUi(self)
+
+        self.tabName = "Log TOC"
+        self.menuName = "Log TOC"
+
+        self.helper = helper
+        self.tabWidget = tabWidget
 
         self.cf = helper.cf
 
         # Init the tree widget
-        self.logTree.setAlternatingRowColors(True)
-        if helper.mainUI.isDark:
-            self.logTree.setStyleSheet('QTreeWidget { alternate-background-color: #3c3c3c; }')
-        else:
-            self.logTree.setStyleSheet('QTreeWidget { alternate-background-color: #e9e9e9; }')
-
-        self.logTree.setHeaderLabels(['Name', 'ID', 'Unpack', 'Storage', 'Description'])
-        self.logTree.header().resizeSection(0, 150)
+        self.logTree.setHeaderLabels(['Name', 'ID', 'Unpack', 'Storage'])
         self.logTree.setSortingEnabled(True)
         self.logTree.sortItems(0, Qt.AscendingOrder)
 
@@ -72,10 +72,7 @@ class LogTab(TabToolbox, param_tab_class):
 
     @pyqtSlot('QString')
     def disconnected(self, linkname):
-        root = self.logTree.invisibleRootItem()
-        for i in range(root.childCount()):
-            item = root.child(i)
-            item.setFlags(Qt.NoItemFlags)
+        self.logTree.clear()
 
     @pyqtSlot(str)
     def connected(self, linkURI):
@@ -83,34 +80,15 @@ class LogTab(TabToolbox, param_tab_class):
 
         toc = self.cf.log.toc
 
-        for row_idx, group in enumerate(list(toc.toc.keys())):
+        for group in list(toc.toc.keys()):
             groupItem = QtWidgets.QTreeWidgetItem()
             groupItem.setData(0, Qt.DisplayRole, group)
-
             for param in list(toc.toc[group].keys()):
                 item = QtWidgets.QTreeWidgetItem()
                 item.setData(0, Qt.DisplayRole, param)
                 item.setData(1, Qt.DisplayRole, toc.toc[group][param].ident)
                 item.setData(2, Qt.DisplayRole, toc.toc[group][param].pytype)
                 item.setData(3, Qt.DisplayRole, toc.toc[group][param].ctype)
-
-                if cfclient.log_param_doc is not None:
-                    try:
-                        log_groups = cfclient.log_param_doc['logs'][group]
-                        log_variable = log_groups['variables'][param]
-                        item.setData(4, Qt.DisplayRole, log_variable['short_desc'])
-                    except:  # noqa
-                        pass
-
                 groupItem.addChild(item)
 
             self.logTree.addTopLevelItem(groupItem)
-
-            if cfclient.log_param_doc is not None:
-                try:
-                    log_groups = cfclient.log_param_doc['logs'][group]
-                    label = QtWidgets.QLabel(log_groups['desc'])
-                    label.setWordWrap(True)
-                    self.logTree.setItemWidget(groupItem, 4, label)
-                except:  # noqa
-                    pass

@@ -33,26 +33,25 @@ import sys
 
 import cflib.crtp
 from cflib.bootloader import Bootloader, Target
-from cflib.bootloader.boottypes import BootVersion
-
-from typing import Optional, List
+from cflib.bootloader.boottypes import BootVersion, TargetTypes
 
 
 def main():
     # Initialise the CRTP link driver
+    link = None
     try:
         cflib.crtp.init_drivers()
+        link = cflib.crtp.get_link_driver("radio://")
     except Exception as e:
         print("Error: {}".format(str(e)))
+        if link:
+            link.close()
         sys.exit(-1)
 
     # Set the default parameters
     clink = None
     action = "info"
     boot = "cold"
-    filename = None  # type: Optional[str]
-    targets = None  # type: Optional[List[Target]]
-    bl = None  # type: Optional[Bootloader]
 
     if len(sys.argv) < 2:
         print()
@@ -75,6 +74,8 @@ def main():
         print("                             possible  page in flash and reset "
               "to firmware")
         print("                             mode.")
+        if link:
+            link.close()
         sys.exit(0)
 
     # Analyse the command line parameters
@@ -102,60 +103,99 @@ def main():
     elif sys.argv[0] == "reset":
         action = "reset"
     elif sys.argv[0] == "flash":
+        # print len(sys.argv)
         if len(sys.argv) < 2:
             print("The flash action require a file name.")
+            link.close()
             sys.exit(-1)
         action = "flash"
         filename = sys.argv[1]
-        targets = []  # Dict[Target]
+        # targetnames = {}
+        # for t in sys.argv[2:]:
+        #     [target, type] = t.split("-")
+        #     if target in targetnames:
+        #         targetnames[target] += (type,)
+        #     else:
+        #         targetnames[target] = (type,)
+
+        targets_sven = []  # Dict[Target]
         for t in sys.argv[2:]:
             if t.startswith("deck-"):
                 [deck, target, type] = t.split("-")
-                targets.append(Target("deck", target, type))
+                targets_sven.append(Target("deck", target, type))
             else:
                 [target, type] = t.split("-")
-                targets.append(Target("cf2", target, type))
+                targets_sven.append(Target("cf2", target, type))
+
     else:
         print("Action", sys.argv[0], "unknown!")
+        link.close()
         sys.exit(-1)
+
+    # Currently there's two different targets available
+    targets = ()
 
     try:
         # Initialise the bootloader lib
         bl = Bootloader(clink)
 
-        warm_boot = (boot == "reset")
-        if warm_boot:
-            print("Reset to bootloader mode ...")
+        #########################################
+        # Get the connection with the bootloader
+        #########################################
+        # The connection is done by reseting to the bootloader (default)
+        if boot == "reset":
+            print("Reset to bootloader mode ..."),
             sys.stdout.flush()
+            if bl.start_bootloader(warm_boot=True):
+                print(" done!")
+            else:
+                print("Failed to warmboot")
+                bl.close()
+                sys.exit(-1)
         else:  # The connection is done by a cold boot ...
             print("Restart the Crazyflie you want to bootload in the next"),
             print(" 10 seconds ..."),
 
             sys.stdout.flush()
+            if bl.start_bootloader(warm_boot=False):
+                print(" done!")
+            else:
+                print("Cannot connect the bootloader!")
+                bl.close()
+                sys.exit(-1)
+
+        print("Connected to bootloader on {} (version=0x{:X})".format(
+            BootVersion.to_ver_string(bl.protocol_version),
+            bl.protocol_version))
+
+        if bl.protocol_version == BootVersion.CF2_PROTO_VER:
+            targets += (bl.get_target(TargetTypes.NRF51),)
+        targets += (bl.get_target(TargetTypes.STM32),)
 
         ######################################
         # Doing something (hopefully) useful
         ######################################
 
+        # Print information about the targets
+        for target in targets:
+            print(target)
         if action == "info":
-            def print_info(version: int, connected_targets: [Target]):
-                print("Connected to bootloader on {} (version=0x{:X})".format(
-                    BootVersion.to_ver_string(version),
-                    version
-                    )
-                )
-                for target in connected_targets:
-                    print(target)
-
-            # flash_full called with no filename will not flash, just call
-            # our info callback
-            bl.flash_full(None, None, warm_boot, None, print_info)
-        elif action == "flash" and filename and targets:
-            try:
-                bl.flash_full(None, filename, warm_boot, targets)
-            except Exception as e:
-                print("Failed to flash: {}".format(e))
+            None  # Already done ...
         elif action == "reset":
+            print
+            print("Reset in firmware mode ...")
+            bl.reset_to_firmware()
+        elif action == "flash":
+            print('='*55)
+            print('Line 180 in cfloarder')
+            print(targets_sven)
+            for t in targets_sven:
+                print('hi')
+                print(t)
+                print(t.platform)
+            print('='*55)
+            bl.flash(filename, targets_sven)
+            print("Reset in firmware mode ...")
             bl.reset_to_firmware()
         else:
             None

@@ -7,7 +7,7 @@
 #  +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
 #   ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
 #
-#  Copyright (C) 2011-2022 Bitcraze AB
+#  Copyright (C) 2011-2017 Bitcraze AB
 #
 #  Crazyflie Nano Quadcopter Client
 #
@@ -41,7 +41,7 @@ from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtWidgets import QLabel
 
 import cfclient
-from cfclient.ui.tab_toolbox import TabToolbox
+from cfclient.ui.tab import Tab
 
 from cflib.crazyflie.log import LogConfig
 from cflib.crazyflie.mem import MemoryElement
@@ -59,7 +59,8 @@ __all__ = ['LocoPositioningTab']
 
 logger = logging.getLogger(__name__)
 
-locopositioning_tab_class = uic.loadUiType(cfclient.module_path + "/ui/tabs/locopositioning_tab.ui")[0]
+locopositioning_tab_class = uic.loadUiType(
+    cfclient.module_path + "/ui/tabs/locopositioning_tab.ui")[0]
 
 STYLE_RED_BACKGROUND = "background-color: lightpink;"
 STYLE_GREEN_BACKGROUND = "background-color: lightgreen;"
@@ -106,7 +107,7 @@ class AxisScaleStep:
         self.center_only = center_only
 
 
-class Plot3dLps(scene.SceneCanvas):
+class Plot3d(scene.SceneCanvas):
     ANCHOR_BRUSH = np.array((0.2, 0.5, 0.2))
     ANCHOR_BRUSH_INVALID = np.array((0.8, 0.5, 0.5))
     HIGHLIGHT_ANCHOR_BRUSH = np.array((0, 1, 0))
@@ -170,7 +171,7 @@ class Plot3dLps(scene.SceneCanvas):
             [base_len, -hw, 0],
             [base_len, -w, 0],
             [0, -w, 0]],
-            width=1.0, color='red', parent=parent, marker_size=0.0)
+            width=1.0, color='red', parent=parent)
 
         # Y-axis
         scene.visuals.LinePlot([
@@ -181,7 +182,7 @@ class Plot3dLps(scene.SceneCanvas):
             [-hw, base_len, 0],
             [-w, base_len, 0],
             [-w, 0, 0]],
-            width=1.0, color='green', parent=parent, marker_size=0.0)
+            width=1.0, color='green', parent=parent)
 
         # Z-axis
         scene.visuals.LinePlot([
@@ -192,7 +193,7 @@ class Plot3dLps(scene.SceneCanvas):
             [0, -hw, base_len],
             [0, -w, base_len],
             [0, -w, 0]],
-            width=1.0, color='blue', parent=parent, marker_size=0.0)
+            width=1.0, color='blue', parent=parent)
 
     def update_data(self, anchors, pos, display_mode):
         self._cf.set_data(pos=np.array([pos]), face_color=self.POSITION_BRUSH)
@@ -295,7 +296,8 @@ class AnchorStateMachine:
     def poll(self):
         if not self._waiting_for_response:
             self._next_step()
-            self._waiting_for_response = self._request_step()
+            self._request_step()
+            self._waiting_for_response = True
 
     def _next_step(self):
         self._current_step += 1
@@ -303,21 +305,13 @@ class AnchorStateMachine:
             self._current_step = 0
 
     def _request_step(self):
-        result = True
-
         action = AnchorStateMachine.STEPS[self._current_step]
         if action == AnchorStateMachine.GET_ACTIVE:
             self._mem.update_active_id_list(self._cb_active_id_list_updated)
         elif action == AnchorStateMachine.GET_IDS:
             self._mem.update_id_list(self._cb_id_list_updated)
         else:
-            if self._mem.nr_of_anchors > 0:
-                # Only request anchor data if we actually have anchors, otherwise the callback will never be called
-                self._mem.update_data(self._cb_data_updated)
-            else:
-                result = False
-
-        return result
+            self._mem.update_data(self._cb_data_updated)
 
     def _get_mem(self, mem_sub):
         mem = mem_sub.get_mems(MemoryElement.TYPE_LOCO2)
@@ -341,7 +335,7 @@ class AnchorStateMachine:
             self._cb_data(mem_data.anchor_data)
 
 
-class LocoPositioningTab(TabToolbox, locopositioning_tab_class):
+class LocoPositioningTab(Tab, locopositioning_tab_class):
     """Tab for plotting Loco Positioning data"""
 
     # Update period of log data in ms
@@ -369,17 +363,25 @@ class LocoPositioningTab(TabToolbox, locopositioning_tab_class):
     _disconnected_signal = pyqtSignal(str)
     _log_error_signal = pyqtSignal(object, str)
     _anchor_range_signal = pyqtSignal(int, object, object)
+    _position_signal = pyqtSignal(int, object, object)
     _loco_sys_signal = pyqtSignal(int, object, object)
     _cb_param_to_detect_loco_deck_signal = pyqtSignal(object, object)
 
     _anchor_active_id_list_updated_signal = pyqtSignal(object)
     _anchor_data_updated_signal = pyqtSignal(object)
 
-    def __init__(self, helper):
-        super(LocoPositioningTab, self).__init__(helper, 'Loco Positioning')
+    def __init__(self, tabWidget, helper, *args):
+        super(LocoPositioningTab, self).__init__(*args)
         self.setupUi(self)
 
+        self.tabName = "Loco Positioning"
+        self.menuName = "Loco Positioning Tab"
+        self.tabWidget = tabWidget
+
+        self._helper = helper
+
         self._anchors = {}
+        self._position = []
         self._clear_state()
         self._refs = []
 
@@ -390,6 +392,7 @@ class LocoPositioningTab(TabToolbox, locopositioning_tab_class):
         self._connected_signal.connect(self._connected)
         self._disconnected_signal.connect(self._disconnected)
         self._anchor_range_signal.connect(self._anchor_range_received)
+        self._position_signal.connect(self._position_received)
         self._loco_sys_signal.connect(self._loco_sys_received)
         self._cb_param_to_detect_loco_deck_signal.connect(
             self._cb_param_to_detect_loco_deck)
@@ -467,7 +470,7 @@ class LocoPositioningTab(TabToolbox, locopositioning_tab_class):
         self.is_loco_deck_active = False
 
         self._graph_timer = QTimer()
-        self._graph_timer.setInterval(int(1000 / self.FPS))
+        self._graph_timer.setInterval(1000 / self.FPS)
         self._graph_timer.timeout.connect(self._update_graphics)
         self._graph_timer.start()
 
@@ -476,12 +479,12 @@ class LocoPositioningTab(TabToolbox, locopositioning_tab_class):
         self._anchor_state_timer.timeout.connect(self._poll_anchor_state)
         self._anchor_state_machine = None
 
-        self._update_position_label(self._helper.pose_logger.position)
+        self._update_position_label(self._position)
 
         self._lps_state = self.LOCO_MODE_UNKNOWN
         self._update_lps_state(self.LOCO_MODE_UNKNOWN)
 
-        self._anchor_position_dialog = AnchorPositionDialog(self, helper)
+        self._anchor_position_dialog = AnchorPositionDialog(self)
         self._configure_anchor_positions_button.setEnabled(False)
 
     def _do_when_checked(self, enabled, fkn, arg):
@@ -489,7 +492,7 @@ class LocoPositioningTab(TabToolbox, locopositioning_tab_class):
             fkn(arg)
 
     def _set_up_plots(self):
-        self._plot_3d = Plot3dLps()
+        self._plot_3d = Plot3d()
         self._plot_layout.addWidget(self._plot_3d.native)
 
     def _set_display_mode(self, display_mode):
@@ -514,6 +517,7 @@ class LocoPositioningTab(TabToolbox, locopositioning_tab_class):
 
     def _clear_state(self):
         self._clear_anchors()
+        self._position = [0.0, 0.0, 0.0]
         self._update_ranging_status_indicators()
         self._id_anchor_button.setEnabled(True)
 
@@ -572,6 +576,16 @@ class LocoPositioningTab(TabToolbox, locopositioning_tab_class):
                         ("ranging", "distance7", "float"),
                     ],
                     self._anchor_range_signal.emit,
+                    self._log_error_signal.emit)
+
+                self._register_logblock(
+                    "LoPoTab2",
+                    [
+                        ("kalman", "stateX", "float"),
+                        ("kalman", "stateY", "float"),
+                        ("kalman", "stateZ", "float"),
+                    ],
+                    self._position_signal.emit,
                     self._log_error_signal.emit)
 
                 self._register_logblock(
@@ -654,6 +668,13 @@ class LocoPositioningTab(TabToolbox, locopositioning_tab_class):
                 if valid:
                     anchor = self._get_create_anchor(anchor_number)
                     anchor.distance = float(value)
+
+    def _position_received(self, timestamp, data, logconf):
+        """Callback from the logging system when the position is updated."""
+        for name, value in data.items():
+            valid, axis = self._parse_position_param_name(name)
+            if valid:
+                self._position[axis] = float(value)
 
     def _loco_sys_received(self, timestamp, data, logconf):
         """Callback from the logging system when the loco pos sys config
@@ -789,9 +810,9 @@ class LocoPositioningTab(TabToolbox, locopositioning_tab_class):
             anchors = copy.deepcopy(self._anchors)
             self._plot_3d.update_data(
                 anchors,
-                self._helper.pose_logger.position,
+                self._position,
                 self._display_mode)
-            self._update_position_label(self._helper.pose_logger.position)
+            self._update_position_label(self._position)
 
     def _update_position_label(self, position):
         if len(position) == 3:

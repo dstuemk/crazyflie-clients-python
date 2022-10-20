@@ -46,7 +46,7 @@
              <item row="2" column="0">
               <widget class="QLabel" name="label">
                <property name="text">
-                <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:12pt;&quot;&gt;The Crazyflie client is a multi-platform client&lt;br/&gt;for controlling, bootloading and logging the Crazyflie.&lt;br/&gt;For more info visit our homepage.&lt;/span&gt;&lt;/p&gt;&lt;p&gt;&lt;a href=&quot;http://www.bitcraze.io&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0000ff;&quot;&gt;Bitcraze Homepage&lt;/span&gt;&lt;/a&gt;&lt;span style=&quot; font-size:12pt;&quot;&gt;&lt;br/&gt;&lt;/span&gt;&lt;a href=&quot;https://www.bitcraze.io/documentation/repository/crazyflie-clients-python/master/userguides/userguide_client/&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0000ff;&quot;&gt;Client documentation&lt;/span&gt;&lt;/a&gt;&lt;span style=&quot; font-size:12pt;&quot;&gt;&lt;br/&gt;&lt;/span&gt;&lt;a href=&quot;http://discussions.bitcraze.io&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0000ff;&quot;&gt;Bitcraze Discussions&lt;/span&gt;&lt;/a&gt;&lt;/p&gt;&lt;p&gt;&lt;br/&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:12pt;&quot;&gt;The Crazyflie client is a multi-platform client&lt;br/&gt;for controlling, bootloading and logging the Crazyflie.&lt;br/&gt;For more info visit our homepage.&lt;/span&gt;&lt;/p&gt;&lt;p&gt;&lt;a href=&quot;http://www.bitcraze.io&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0000ff;&quot;&gt;Bitcraze Homepage&lt;/span&gt;&lt;/a&gt;&lt;span style=&quot; font-size:12pt;&quot;&gt;&lt;br/&gt;&lt;/span&gt;&lt;a href=&quot;http://wiki.bitcraze.io/doc:crazyflie:client:pycfclient:index&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0000ff;&quot;&gt;Client documentation on Bitcraze Wiki&lt;/span&gt;&lt;/a&gt;&lt;span style=&quot; font-size:12pt;&quot;&gt;&lt;br/&gt;&lt;/span&gt;&lt;a href=&quot;http://forum.bitcraze.se&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0000ff;&quot;&gt;Bitcraze Forum&lt;/span&gt;&lt;/a&gt;&lt;/p&gt;&lt;p&gt;&lt;br/&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                </property>
                <property name="openExternalLinks">
                 <bool>true</bool>
@@ -90,19 +90,9 @@
          <item>
           <layout class="QGridLayout" name="gridLayout_3">
            <item row="0" column="0">
-            <widget class="QTextBrowser" name="_credits">
-             <property name="html">
-              <string>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
-&lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
-p, li { white-space: pre-wrap; }
-&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'Cantarell'; font-size:11pt; font-weight:400; font-style:normal;&quot;&gt;
-&lt;p style=&quot; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Contributions&lt;/span&gt;&lt;br /&gt;We are very grateful for all the contributions we have received for this project. Below is a link showing all of the users that have contributed to the Crazyflie client. &lt;br /&gt;&lt;br /&gt;Thank you! &lt;br /&gt;&lt;br /&gt;&lt;a href=&quot;https://github.com/bitcraze/crazyflie-clients-python/graphs/contributors&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#1b6acb;&quot;&gt;Contributor information on GitHub&lt;/span&gt;&lt;/a&gt; &lt;br /&gt;&lt;br /&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-             </property>
+            <widget class="QTextEdit" name="_credits">
              <property name="textInteractionFlags">
               <set>Qt::LinksAccessibleByKeyboard|Qt::LinksAccessibleByMouse|Qt::TextBrowserInteraction|Qt::TextEditable|Qt::TextEditorInteraction|Qt::TextSelectableByKeyboard|Qt::TextSelectableByMouse</set>
-             </property>
-             <property name="openExternalLinks">
-              <bool>true</bool>
              </property>
             </widget>
            </item>

@@ -183,11 +183,11 @@ class PySDL2Reader():
 
     def devices(self):
         """List all the available devices."""
-        logger.info("Looking for devices")
+        # logger.info("Looking for devices")
         names = []
         if len(self._devices) == 0:
             nbrOfInputs = sdl2.joystick.SDL_NumJoysticks()
-            logger.info("Found {} devices".format(nbrOfInputs))
+            # logger.info("Found {} devices".format(nbrOfInputs))
             for sdl_index in range(0, nbrOfInputs):
                 j = sdl2.joystick.SDL_JoystickOpen(sdl_index)
                 name = sdl2.joystick.SDL_JoystickName(j).decode("UTF-8")

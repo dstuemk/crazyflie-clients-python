@@ -24,7 +24,6 @@
 #  this program; if not, write to the Free Software Foundation, Inc., 51
 #  Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-import json
 import os
 from appdirs import AppDirs
 import sys
@@ -37,6 +36,10 @@ else:
                                'lib', 'cfclient')
 config_path = AppDirs("cfclient", "Bitcraze").user_config_dir
 
+# Locate the sdl2 lib on Windows (should be in cfclient/thirst_party/)
+if os.name == 'nt':
+    os.environ["PYSDL2_DLL_PATH"] = os.path.join(module_path, "third_party")
+
 if not hasattr(sys, 'frozen'):
     import pkg_resources
     try:
@@ -44,11 +47,6 @@ if not hasattr(sys, 'frozen'):
     except pkg_resources.DistributionNotFound:
         VERSION = "dev"
 else:
+    import json
     with open(os.path.join(module_path, "version.json")) as f:
         VERSION = json.load(f)['version']
-
-try:
-    with open(os.path.join(module_path, "resources/log_param_doc.json")) as f:
-        log_param_doc = json.load(f)
-except:  # noqa
-    log_param_doc = None

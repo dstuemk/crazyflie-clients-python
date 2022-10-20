@@ -7,7 +7,7 @@
 #  +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
 #   ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
 #
-#  Copyright (C) 2011-2022 Bitcraze AB
+#  Copyright (C) 2011-2013 Bitcraze AB
 #
 #  Crazyflie Nano Quadcopter Client
 #
@@ -34,10 +34,9 @@ import logging
 
 from PyQt5 import QtGui, uic
 from PyQt5.QtCore import pyqtSignal
-from PyQt5 import QtWidgets
 
 import cfclient
-from cfclient.ui.tab_toolbox import TabToolbox
+from cfclient.ui.tab import Tab
 from cfclient.utils.ui import UiUtils
 
 from cflib.crazyflie.mem import MemoryElement
@@ -47,18 +46,25 @@ __all__ = ['LEDTab']
 
 logger = logging.getLogger(__name__)
 
-led_tab_class = uic.loadUiType(cfclient.module_path + "/ui/tabs/ledTab.ui")[0]
+led_tab_class = uic.loadUiType(cfclient.module_path +
+                               "/ui/tabs/ledTab.ui")[0]
 
 
-class LEDTab(TabToolbox, led_tab_class):
+class LEDTab(Tab, led_tab_class):
     """Tab for plotting logging data"""
 
     _connected_signal = pyqtSignal(str)
     _disconnected_signal = pyqtSignal(str)
 
-    def __init__(self, helper):
-        super(LEDTab, self).__init__(helper, 'LED')
+    def __init__(self, tabWidget, helper, *args):
+        super(LEDTab, self).__init__(*args)
         self.setupUi(self)
+
+        self.tabName = "LED"
+        self.menuName = "LED tab"
+        self.tabWidget = tabWidget
+
+        self._helper = helper
 
         # Always wrap callbacks from Crazyflie API though QT Signal/Slots
         # to avoid manipulating the UI when rendering it
@@ -115,7 +121,7 @@ class LEDTab(TabToolbox, led_tab_class):
             led = self._mem.leds[nbr]
             col = QtGui.QColor.fromRgb(led.r, led.g, led.b)
 
-        col = QtWidgets.QColorDialog.getColor(col)
+        col = QtGui.QColorDialog.getColor(col)
 
         if col.isValid() and self._mem:
             logger.info(col.red())
