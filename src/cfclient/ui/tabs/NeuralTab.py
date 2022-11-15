@@ -312,17 +312,23 @@ class NeuralTab(Tab, neural_tab_class):
         self._helper.cf.send_packet(packet)
     
     def button_start_net_action(self):
-        self.recordings = []
-        packet = CRTPPacket()
-        packet.set_header(0x0C, 0)
-        packet._set_data([2])
-        self._helper.cf.send_packet(packet)
-        # Automatically land if selected
-        if self.checkBox_auto_land.isChecked():
-            timer = QTimer(self)
-            timer.setSingleShot(True)
-            timer.timeout.connect(lambda: self.button_land_action())
-            timer.start(self.doubleSpinBox_land.value()*1000)
+        timer_ = QTimer(self)
+        def timer_fn():
+            self.recordings = []
+            packet = CRTPPacket()
+            packet.set_header(0x0C, 0)
+            packet._set_data([2])
+            self._helper.cf.send_packet(packet)
+            # Automatically land if selected
+            if self.checkBox_auto_land.isChecked():
+                timer = QTimer(self)
+                timer.setSingleShot(True)
+                timer.timeout.connect(lambda: self.button_land_action())
+                timer.start(self.doubleSpinBox_land.value()*1000)
+        timer_.setSingleShot(True)
+        timer_.timeout.connect(timer_fn)
+        print("Start in 5 seconds...")
+        timer_.start(5000)
     
     def updateControlStateInfo(self):
         self.text_drone_state.setText(
