@@ -1,12 +1,8 @@
-from http import server
-from pathlib import Path
 import pathlib
 from signal import signal
-import glob
 import json
-import struct
 import time
-import tempfile
+import os
 import datetime
 import math
 import csv
@@ -47,27 +43,24 @@ class Threaded(QObject):
     @pyqtSlot(str)
     def transferParameters(self, data_in):
         data_in_obj = json.loads(data_in)
-        param_files = data_in_obj["param_files"]
-        sel_arch_id = data_in_obj["sel_arch_id"]
-        for param_file_idx in range(len(param_files)):
-            param_arr = np.loadtxt(param_files[param_file_idx])
-            print(param_files[param_file_idx])
-            print(str(param_arr[0:10]) + " ... ")
-            print("----------------")
-            self.progress.emit(param_file_idx*100 // len(param_files))
-            for param_arr_idx in range(0, len(param_arr), 10):
-                data_arr = [4]                                   # Command Transfer
-                data_arr.append(16*sel_arch_id + param_file_idx) # Arch and layer index
-                data_arr = [                                     # Layer size (uint16)
-                    *data_arr, *list(np.array(len(param_arr),dtype="<u2").tostring())]
-                data_arr = [                                     # Param index (uint16)
-                    *data_arr, *list(np.array(param_arr_idx,dtype="<u2").tostring())]
-                for val_idx in range(10):
-                    if param_arr_idx + val_idx >= len(param_arr):
-                        break
-                    data_arr = [                                 # Param values (float16)
-                        *data_arr, *list(np.array(param_arr[param_arr_idx + val_idx],dtype="<f2").tostring())]
-                self.data_arr.emit(json.dumps(data_arr))
+        model_file = data_in_obj["model_file"]
+        line_buf = []
+        with open(model_file) as txtfile:
+            for ln in txtfile:
+                if len(ln.strip()) > 0:
+                    line_buf.append([
+                        *np.fromstring(ln, sep=' ')  # Data in bytes
+                    ])
+        for ln_idx in range(len(line_buf)):
+            self.progress.emit(ln_idx*100 // len(line_buf))
+            ln = line_buf[ln_idx]
+            ln_chunks = 20
+            for ln_start in range(0,len(ln)-1,ln_chunks):
+                ln_sub = ln[ln_start:ln_start+ln_chunks]
+                self.data_arr.emit(json.dumps([
+                    4,       # Command transfer
+                    *ln_sub  # Data
+                ]))
                 time.sleep(0.01)
         self.finished.emit("done")
 
@@ -85,8 +78,7 @@ class DroneStateBuilder:
             #"R4", "R5", "R6",
             #"R7", "R8", "R9",
             "M1", "M2", "M3", "M4",
-            "time", 
-            #"dtimeMs"
+            "time"
         ]
         self.data_format = [*([2]*27)] # Size of each data point
         assert len(self.data_format) == len(self.data_keys), \
@@ -224,7 +216,9 @@ class NeuralTab(Tab, neural_tab_class):
         timestamp = datetime.datetime.today()
         csv_filename,_ = QtWidgets.QFileDialog.getSaveFileName(
             self, 'Save CSV File',
-            f"flight-{self.combo_architecture.currentText()}__{timestamp.strftime('%Y_%m_%d__%H_%M_%S')}.csv")
+            os.path.join(
+                self.text_path.text(),
+                f"flight__{timestamp.strftime('%Y_%m_%d__%H_%M_%S')}.csv"))
         print(csv_filename) 
         if "" == csv_filename:
             print("No file selected")
@@ -246,26 +240,22 @@ class NeuralTab(Tab, neural_tab_class):
     def button_transfer_action(self):
         sel_folder = self.text_path.text()
         if "" == sel_folder:
-            QtWidgets.QMessageBox.about(self, "No Folder selected", "Please select firmware folder first!")
+            QtWidgets.QMessageBox.about(self, "No Folder selected", "Please select agent folder")
             return
-        keras2c_folder = pathlib.Path(sel_folder) / "vendor" / "keras2c"
-        sel_arch = self.combo_architecture.currentText()
-        sel_arch_id = -1
-        if "Forward" == sel_arch:
-            sel_arch_id = 0
-            param_files = glob.glob(str(keras2c_folder / "neural_forward*.csv"))
-        elif "Recurrent" == sel_arch:
-            sel_arch_id = 1
-            param_files = glob.glob(str(keras2c_folder / "neural_recurrent*.csv"))
-        elif "Cascaded" == sel_arch:
-            sel_arch_id = 2
-            param_files = glob.glob(str(keras2c_folder / "neural_cascaded*.csv"))
-        else:
-            QtWidgets.QMessageBox.about(self, "Error", f"Invalid architecture '{sel_arch}' selected!")
-            return
+        model_file = pathlib.Path(sel_folder) / "model.dat"
+        conf_file  = pathlib.Path(sel_folder) / "config.json"
+        with open(conf_file) as hndl:
+            conf_data = json.load(hndl)
+            packet = CRTPPacket()
+            packet.set_header(0x0C, 0)
+            obs_model = 1 if conf_data["observation_model"] == 'state' else 0
+            packet._set_data([
+                8,                                     # config command
+                conf_data["observation_history_size"], # History size
+                obs_model ])                           # 0->sensor | 1->state
+            self._helper.cf.send_packet(packet)
         self.transferData.emit(json.dumps({
-            "param_files": param_files,
-            "sel_arch_id": sel_arch_id
+            "model_file": str(model_file)
         }))
     
     @pyqtSlot(int)
@@ -274,11 +264,15 @@ class NeuralTab(Tab, neural_tab_class):
 
     @pyqtSlot(str)
     def send_transfer_packet(self, data_str):
-        data_arr = json.loads(data_str)
-        packet = CRTPPacket()
-        packet.set_header(0x0C, 0)
-        packet._set_data(data_arr)
-        self._helper.cf.send_packet(packet)
+        try:
+            data_arr = json.loads(data_str)
+            packet = CRTPPacket()
+            packet.set_header(0x0C, 0)
+            packet._set_data([int(v) for v in data_arr])
+            self._helper.cf.send_packet(packet)
+        except:
+            print("exception:")
+            print(data_arr)
                 
     @pyqtSlot(str)
     def finished_transfer(self, data_str):
@@ -287,10 +281,10 @@ class NeuralTab(Tab, neural_tab_class):
         packet._set_data([3])
         self._helper.cf.send_packet(packet)
         # Set inference time after transmitting
-        self.button_adjust_action()
+        # self.button_adjust_action()
 
     def button_load_action(self):
-        sel_folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select firmware Directory")
+        sel_folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Agent Directory")
         self.text_path.setText(sel_folder)
             
     def button_on_action(self):

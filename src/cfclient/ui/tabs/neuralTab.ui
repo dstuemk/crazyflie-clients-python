@@ -136,7 +136,7 @@
     <property name="geometry">
      <rect>
       <x>430</x>
-      <y>190</y>
+      <y>140</y>
       <width>141</width>
       <height>28</height>
      </rect>
@@ -190,31 +190,6 @@
      <string>Transfer</string>
     </property>
    </widget>
-   <widget class="QComboBox" name="combo_architecture">
-    <property name="geometry">
-     <rect>
-      <x>430</x>
-      <y>90</y>
-      <width>141</width>
-      <height>21</height>
-     </rect>
-    </property>
-    <item>
-     <property name="text">
-      <string>Forward</string>
-     </property>
-    </item>
-    <item>
-     <property name="text">
-      <string>Recurrent</string>
-     </property>
-    </item>
-    <item>
-     <property name="text">
-      <string>Cascaded</string>
-     </property>
-    </item>
-   </widget>
    <widget class="QPushButton" name="button_neural_load">
     <property name="geometry">
      <rect>
@@ -245,7 +220,7 @@
     <property name="geometry">
      <rect>
       <x>430</x>
-      <y>140</y>
+      <y>90</y>
       <width>141</width>
       <height>22</height>
      </rect>
@@ -267,7 +242,7 @@
     <property name="geometry">
      <rect>
       <x>260</x>
-      <y>140</y>
+      <y>90</y>
       <width>161</width>
       <height>20</height>
      </rect>
@@ -302,7 +277,7 @@
     <property name="geometry">
      <rect>
       <x>430</x>
-      <y>240</y>
+      <y>190</y>
       <width>141</width>
       <height>22</height>
      </rect>
@@ -324,7 +299,7 @@
     <property name="geometry">
      <rect>
       <x>260</x>
-      <y>240</y>
+      <y>190</y>
       <width>161</width>
       <height>20</height>
      </rect>
@@ -359,7 +334,7 @@
     <property name="geometry">
      <rect>
       <x>430</x>
-      <y>290</y>
+      <y>240</y>
       <width>141</width>
       <height>28</height>
      </rect>
