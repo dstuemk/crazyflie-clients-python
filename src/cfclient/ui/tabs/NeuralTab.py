@@ -281,7 +281,7 @@ class NeuralTab(Tab, neural_tab_class):
         packet._set_data([3])
         self._helper.cf.send_packet(packet)
         # Set inference time after transmitting
-        # self.button_adjust_action()
+        self.button_adjust_action()
 
     def button_load_action(self):
         sel_folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Agent Directory")
@@ -321,8 +321,8 @@ class NeuralTab(Tab, neural_tab_class):
                 timer.start(self.doubleSpinBox_land.value()*1000)
         timer_.setSingleShot(True)
         timer_.timeout.connect(timer_fn)
-        print("Start in 5 seconds...")
-        timer_.start(5000)
+        print("Start in 1 seconds...")
+        timer_.start(1000)
     
     def updateControlStateInfo(self):
         self.text_drone_state.setText(
