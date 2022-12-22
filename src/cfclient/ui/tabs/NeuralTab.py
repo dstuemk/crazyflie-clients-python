@@ -43,14 +43,13 @@ class Threaded(QObject):
     @pyqtSlot(str)
     def transferParameters(self, data_in):
         data_in_obj = json.loads(data_in)
-        model_file = data_in_obj["model_file"]
+        policy_net = data_in_obj["policy_net"]
         line_buf = []
-        with open(model_file) as txtfile:
-            for ln in txtfile:
-                if len(ln.strip()) > 0:
-                    line_buf.append([
-                        *np.fromstring(ln, sep=' ')  # Data in bytes
-                    ])
+        for ln in policy_net.split("\n"):
+            if len(ln.strip()) > 0:
+                line_buf.append([
+                    *np.fromstring(ln, sep=' ')  # Data in bytes
+                ])
         for ln_idx in range(len(line_buf)):
             self.progress.emit(ln_idx*100 // len(line_buf))
             ln = line_buf[ln_idx]
@@ -217,7 +216,7 @@ class NeuralTab(Tab, neural_tab_class):
         csv_filename,_ = QtWidgets.QFileDialog.getSaveFileName(
             self, 'Save CSV File',
             os.path.join(
-                self.text_path.text(),
+                os.path.dirname(self.text_path.text()),
                 f"flight__{timestamp.strftime('%Y_%m_%d__%H_%M_%S')}.csv"))
         print(csv_filename) 
         if "" == csv_filename:
@@ -238,24 +237,22 @@ class NeuralTab(Tab, neural_tab_class):
         self._helper.cf.send_packet(packet)
 
     def button_transfer_action(self):
-        sel_folder = self.text_path.text()
-        if "" == sel_folder:
-            QtWidgets.QMessageBox.about(self, "No Folder selected", "Please select agent folder")
+        sel_file = self.text_path.text()
+        if "" == sel_file:
+            QtWidgets.QMessageBox.about(self, "No File selected", "Please select model file")
             return
-        model_file = pathlib.Path(sel_folder) / "model.dat"
-        conf_file  = pathlib.Path(sel_folder) / "config.json"
-        with open(conf_file) as hndl:
-            conf_data = json.load(hndl)
+        with open(sel_file) as hndl:
+            file_data = json.load(hndl)
             packet = CRTPPacket()
             packet.set_header(0x0C, 0)
-            obs_model = 1 if conf_data["observation_model"] == 'state' else 0
+            obs_model = 1 if file_data["observation_model"] == 'state' else 0
             packet._set_data([
                 8,                                     # config command
-                conf_data["observation_history_size"], # History size
+                file_data["observation_history_size"], # History size
                 obs_model ])                           # 0->sensor | 1->state
             self._helper.cf.send_packet(packet)
         self.transferData.emit(json.dumps({
-            "model_file": str(model_file)
+            "policy_net": file_data['policy_net']
         }))
     
     @pyqtSlot(int)
@@ -284,8 +281,8 @@ class NeuralTab(Tab, neural_tab_class):
         self.button_adjust_action()
 
     def button_load_action(self):
-        sel_folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Agent Directory")
-        self.text_path.setText(sel_folder)
+        sel_file = QtWidgets.QFileDialog.getOpenFileName(self, "Select Model File")
+        self.text_path.setText(sel_file[0])
             
     def button_on_action(self):
         packet = CRTPPacket()
